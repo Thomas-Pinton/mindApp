@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -6,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
-import { saveReflection } from '@/services/database';
+import { deleteGratitude, getDailyPrompt, getTodayGratitudes, getTodayReflection, saveGratitude, saveReflection, updateGratitude } from '@/services/database';
 
 const QUOTES = [
   { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -42,13 +43,153 @@ const REFLECTIONS = [
   "What was the most challenging part of your day, and how did you handle it?"
 ];
 
+function GratitudePrompt() {
+  const [gratitudes, setGratitudes] = useState<{ id: number, content: string }[]>([]);
+  const [newGratitude, setNewGratitude] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState('');
+
+  const loadGratitudes = useCallback(async () => {
+    const data = await getTodayGratitudes();
+    setGratitudes(data);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadGratitudes();
+    }, [loadGratitudes])
+  );
+
+  const handleSave = async () => {
+    if (!newGratitude.trim()) {
+      Alert.alert('Empty', 'Please write something before saving.');
+      return;
+    }
+
+    await saveGratitude(newGratitude);
+    setNewGratitude('');
+    await loadGratitudes();
+  };
+
+  const handleUpdate = async (id: number) => {
+    if (!editContent.trim()) {
+      Alert.alert('Empty', 'Cannot save empty gratitude.');
+      return;
+    }
+    await updateGratitude(id, editContent);
+    setEditingId(null);
+    setEditContent('');
+    await loadGratitudes();
+  };
+
+  const handleDelete = (id: number) => {
+    Alert.alert('Delete Gratitude', 'Are you sure you want to delete this gratitude?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteGratitude(id);
+          await loadGratitudes();
+        },
+      },
+    ]);
+  };
+
+  const startEditing = (item: { id: number, content: string }) => {
+    setEditingId(item.id);
+    setEditContent(item.content);
+  };
+
+  return (
+    <ThemedView style={styles.quoteContainer}>
+      <ThemedText type="subtitle" style={styles.quoteTitle}>Daily Gratitude</ThemedText>
+      <ThemedText style={styles.quoteText}>What are you grateful for today?</ThemedText>
+
+      <ThemedView style={styles.gratitudeList}>
+        {gratitudes.map((item) => (
+          <ThemedView key={item.id} style={styles.gratitudeItemRow}>
+            {editingId === item.id ? (
+              <ThemedView style={styles.editContainer}>
+                <TextInput
+                  style={styles.editInput}
+                  value={editContent}
+                  onChangeText={setEditContent}
+                  autoFocus
+                />
+                <TouchableOpacity onPress={() => handleUpdate(item.id)}>
+                  <IconSymbol name="checkmark.circle.fill" size={24} color="#4a90e2" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setEditingId(null)}>
+                  <IconSymbol name="xmark.circle.fill" size={24} color="#999" />
+                </TouchableOpacity>
+              </ThemedView>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.gratitudeContent}
+                  onPress={() => startEditing(item)}>
+                  <ThemedText>• {item.content}</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <IconSymbol name="trash.fill" size={20} color="#ff6b6b" />
+                </TouchableOpacity>
+              </>
+            )}
+          </ThemedView>
+        ))}
+      </ThemedView>
+
+      <ThemedView style={styles.inputContainer}>
+        <TextInput
+          style={styles.chatInput}
+          placeholder="I am grateful for..."
+          placeholderTextColor="#999"
+          value={newGratitude}
+          onChangeText={setNewGratitude}
+          multiline
+          blurOnSubmit
+          submitBehavior="submit"
+          onSubmitEditing={handleSave}
+          returnKeyType="send"
+        />
+        <TouchableOpacity
+          style={styles.sendButton}
+          onPress={handleSave}
+        >
+          <IconSymbol name="arrow.up.circle.fill" size={32} color="#4a90e2" />
+        </TouchableOpacity>
+      </ThemedView>
+    </ThemedView>
+  );
+}
+
 function ReflectionPrompt() {
   const [reflection, setReflection] = useState(REFLECTIONS[0]);
   const [answer, setAnswer] = useState('');
 
-  useEffect(() => {
-    setReflection(REFLECTIONS[Math.floor(Math.random() * REFLECTIONS.length)]);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      async function loadToday() {
+        // Ensure we get the stable daily prompt first
+        const dailyPrompt = await getDailyPrompt(REFLECTIONS);
+        setReflection(dailyPrompt);
+
+        // Then check if there's an answer for it already (or just any answer for today)
+        const existing = await getTodayReflection();
+        if (existing) {
+          // If we saved one today, use its prompt and answer (handles edge case where we saved before DB update)
+          // But ideally 'dailyPrompt' should match 'existing.prompt' if everything aligns.
+          // We'll trust 'existing' if it exists to show what was saved.
+          setReflection(existing.prompt);
+          setAnswer(existing.answer);
+        } else {
+          setAnswer('');
+        }
+      }
+      loadToday();
+    }, [])
+  );
 
   return (
     <ThemedView style={styles.quoteContainer}>
@@ -70,7 +211,7 @@ function ReflectionPrompt() {
             return;
           }
           saveReflection(reflection, answer);
-          setAnswer('');
+          // Don't clear answer on save anymore, as it acts as an edit
           Alert.alert('Saved', 'Your reflection has been saved.');
         }}
       >
@@ -104,7 +245,14 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView>
         <ThemedText type="title" style={styles.header}>{getGreeting()}, username</ThemedText>
-        {isEvening ? <ReflectionPrompt /> : <QuoteOfTheDay />}
+        {isEvening ? (
+          <>
+            <ReflectionPrompt />
+            <GratitudePrompt />
+          </>
+        ) : (
+          <QuoteOfTheDay />
+        )}
       </SafeAreaView>
     </ThemedView>
   );
@@ -164,4 +312,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
+  gratitudeList: {
+    gap: 8,
+    marginVertical: 12,
+  },
+  gratitudeItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  gratitudeContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  editContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editInput: {
+    flex: 1,
+    color: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 4,
+    padding: 4,
+    fontSize: 14, // Match default text size roughly
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  chatInput: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    color: '#fff',
+    fontSize: 16,
+    maxHeight: 100,
+  },
+  sendButton: {
+    padding: 4,
+  }
 });

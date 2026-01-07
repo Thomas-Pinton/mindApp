@@ -1,6 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 
-const db = SQLite.openDatabaseSync('mindApp.db');
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+const getDb = async (): Promise<SQLite.SQLiteDatabase> => {
+    if (!dbPromise) {
+        dbPromise = SQLite.openDatabaseAsync('mindApp.db');
+    }
+    return dbPromise;
+};
 
 export interface Reflection {
     id: number;
@@ -9,26 +16,141 @@ export interface Reflection {
     date: string;
 }
 
-export const initDatabase = () => {
-    db.execSync(`
+export const initDatabase = async () => {
+    const db = await getDb();
+    await db.execAsync(`
     CREATE TABLE IF NOT EXISTS reflections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       prompt TEXT NOT NULL,
       answer TEXT NOT NULL,
       date TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS daily_prompts (
+      date TEXT PRIMARY KEY NOT NULL,
+      prompt TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gratitudes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      date TEXT NOT NULL
+    );
   `);
 };
 
-export const saveReflection = (prompt: string, answer: string) => {
+export const getTodayReflection = async (): Promise<Reflection | null> => {
+    const db = await getDb();
+    const now = new Date();
+    const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+    const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+
+    const result = await db.getFirstAsync<Reflection>(
+        'SELECT * FROM reflections WHERE date >= ? AND date <= ? ORDER BY date DESC LIMIT 1',
+        [startOfDay, endOfDay]
+    );
+    return result;
+}
+
+export const getTodayGratitudes = async (): Promise<{ id: number, content: string }[]> => {
+    const db = await getDb();
+    const now = new Date();
+    const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+    const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+
+    const result = await db.getAllAsync<{ id: number, content: string }>(
+        'SELECT id, content FROM gratitudes WHERE date >= ? AND date <= ? ORDER BY id ASC',
+        [startOfDay, endOfDay]
+    );
+    return result;
+}
+
+export const saveGratitude = async (content: string) => {
+    const db = await getDb();
     const date = new Date().toISOString();
-    db.runSync(
-        'INSERT INTO reflections (prompt, answer, date) VALUES (?, ?, ?)',
-        [prompt, answer, date]
+    await db.runAsync(
+        'INSERT INTO gratitudes (content, date) VALUES (?, ?)',
+        [content, date]
     );
 };
 
-export const getReflections = (): Reflection[] => {
-    const allRows = db.getAllSync('SELECT * FROM reflections ORDER BY date DESC');
+export const updateGratitude = async (id: number, content: string) => {
+    const db = await getDb();
+    await db.runAsync(
+        'UPDATE gratitudes SET content = ? WHERE id = ?',
+        [content, id]
+    );
+};
+
+export const deleteGratitude = async (id: number) => {
+    const db = await getDb();
+    await db.runAsync(
+        'DELETE FROM gratitudes WHERE id = ?',
+        [id]
+    );
+};
+
+export const getDailyPrompt = async (candidates: string[]): Promise<string> => {
+    const db = await getDb();
+    const now = new Date();
+    // Use YYYY-MM-DD format for the primary key to ensure one per calendar day
+    const dateKey = now.toISOString().split('T')[0];
+
+    // Check for existing prompt for today
+    const existing = await db.getFirstAsync<{ prompt: string }>(
+        'SELECT prompt FROM daily_prompts WHERE date = ?',
+        [dateKey]
+    );
+
+    if (existing) {
+        return existing.prompt;
+    }
+
+    // Generate new prompt
+    const newPrompt = candidates[Math.floor(Math.random() * candidates.length)];
+
+    try {
+        await db.runAsync(
+            'INSERT INTO daily_prompts (date, prompt) VALUES (?, ?)',
+            [dateKey, newPrompt]
+        );
+    } catch (error) {
+        // Handle race condition where another insert happened immediately
+        const racingPrompt = await db.getFirstAsync<{ prompt: string }>(
+            'SELECT prompt FROM daily_prompts WHERE date = ?',
+            [dateKey]
+        );
+        if (racingPrompt) return racingPrompt.prompt;
+        throw error;
+    }
+
+    return newPrompt;
+};
+
+export const saveReflection = async (prompt: string, answer: string) => {
+    const db = await getDb();
+    const existing = await getTodayReflection();
+    const date = new Date().toISOString();
+
+    if (existing) {
+        await db.runAsync(
+            'UPDATE reflections SET answer = ?, date = ? WHERE id = ?',
+            [answer, date, existing.id]
+        );
+    } else {
+        await db.runAsync(
+            'INSERT INTO reflections (prompt, answer, date) VALUES (?, ?, ?)',
+            [prompt, answer, date]
+        );
+    }
+};
+
+export const getReflections = async (): Promise<Reflection[]> => {
+    const db = await getDb();
+    const allRows = await db.getAllAsync('SELECT * FROM reflections ORDER BY date DESC');
     return allRows as Reflection[];
+}
+
+export const getGratitudes = async (): Promise<{ id: number, content: string, date: string }[]> => {
+    const db = await getDb();
+    const allRows = await db.getAllAsync('SELECT * FROM gratitudes ORDER BY date DESC');
+    return allRows as { id: number, content: string, date: string }[];
 }
