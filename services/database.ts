@@ -34,6 +34,17 @@ export const initDatabase = async () => {
       content TEXT NOT NULL,
       date TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS daily_quotes (
+      date TEXT PRIMARY KEY NOT NULL,
+      text TEXT NOT NULL,
+      author TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS saved_quotes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      author TEXT NOT NULL,
+      date TEXT NOT NULL
+    );
   `);
 };
 
@@ -123,6 +134,74 @@ export const getDailyPrompt = async (candidates: string[]): Promise<string> => {
     }
 
     return newPrompt;
+};
+
+import quotesData from './quotes.json';
+
+// ... (existing code)
+
+export const saveQuote = async (text: string, author: string) => {
+    const db = await getDb();
+    const date = new Date().toISOString();
+    await db.runAsync(
+        'INSERT INTO saved_quotes (text, author, date) VALUES (?, ?, ?)',
+        [text, author, date]
+    );
+};
+
+export const isQuoteSaved = async (text: string, author: string): Promise<boolean> => {
+    const db = await getDb();
+    const result = await db.getFirstAsync<{ id: number }>(
+        'SELECT id FROM saved_quotes WHERE text = ? AND author = ?',
+        [text, author]
+    );
+    return !!result;
+};
+
+export const removeSavedQuote = async (text: string, author: string) => {
+    const db = await getDb();
+    await db.runAsync(
+        'DELETE FROM saved_quotes WHERE text = ? AND author = ?',
+        [text, author]
+    );
+};
+
+export const getDailyQuote = async (): Promise<{ text: string, author: string }> => {
+    const db = await getDb();
+    const now = new Date();
+    const dateKey = now.toISOString().split('T')[0];
+
+    const existing = await db.getFirstAsync<{ text: string, author: string }>(
+        'SELECT text, author FROM daily_quotes WHERE date = ?',
+        [dateKey]
+    );
+
+    if (existing) {
+        return existing;
+    }
+
+    const randomQuote = quotesData[Math.floor(Math.random() * quotesData.length)];
+
+    const newQuote = {
+        text: randomQuote.quoteText,
+        author: randomQuote.quoteAuthor
+    };
+
+    try {
+        await db.runAsync(
+            'INSERT INTO daily_quotes (date, text, author) VALUES (?, ?, ?)',
+            [dateKey, newQuote.text, newQuote.author]
+        );
+    } catch (error) {
+        const racingQuote = await db.getFirstAsync<{ text: string, author: string }>(
+            'SELECT text, author FROM daily_quotes WHERE date = ?',
+            [dateKey]
+        );
+        if (racingQuote) return racingQuote;
+        throw error;
+    }
+
+    return newQuote;
 };
 
 export const saveReflection = async (prompt: string, answer: string) => {

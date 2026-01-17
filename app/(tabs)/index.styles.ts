@@ -1,0 +1,160 @@
+import { Colors } from '@/constants/theme';
+import { StyleSheet } from 'react-native';
+
+export const createStyles = (theme: 'light' | 'dark', colors: typeof Colors.light) => StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    header: {
+        padding: 24,
+        paddingBottom: 12,
+        color: colors.textPrimary,
+    },
+    quoteContainer: {
+        marginTop: 16,
+        marginHorizontal: 20,
+        padding: 24,
+        borderRadius: 24,
+        backgroundColor: colors.cardBackground,
+        borderWidth: 1,
+        borderColor: colors.cardBorder,
+    },
+    quoteTitle: {
+        marginBottom: 12,
+        fontSize: 20,
+        fontWeight: '700',
+        color: colors.textPrimary,
+    },
+    quoteText: {
+        fontSize: 16,
+        fontStyle: 'italic',
+        lineHeight: 26,
+        color: colors.textSecondary,
+    },
+    quoteAuthor: {
+        textAlign: 'right',
+        marginTop: 12,
+        fontSize: 14,
+        color: colors.textTertiary,
+    },
+    saveQuoteButton: {
+        position: 'absolute',
+        top: 24,
+        right: 24,
+    },
+    input: {
+        marginTop: 20,
+        padding: 16,
+        borderRadius: 16,
+        backgroundColor: colors.inputBackground,
+        color: colors.textPrimary,
+        fontSize: 16,
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    saveButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primaryButton,
+        paddingVertical: 14,
+        marginTop: 20,
+        borderRadius: 16,
+        gap: 8,
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    saveButtonText: {
+        color: '#fff', // Always white on primary button
+        fontWeight: '700',
+        fontSize: 16,
+    },
+    gratitudeList: {
+        marginVertical: 16,
+    },
+    gratitudeItemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.cardBorder,
+    },
+    gratitudeContent: {
+        flex: 1,
+        marginRight: 12,
+    },
+    gratitudeText: {
+        fontSize: 16,
+        color: colors.textPrimary,
+    },
+    editContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    editInput: {
+        flex: 1,
+        color: colors.textPrimary,
+        borderRadius: 8,
+        padding: 8,
+        fontSize: 16,
+        backgroundColor: colors.inputBackground,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginTop: 12,
+        padding: 4,
+        paddingLeft: 12,
+        borderRadius: 24,
+    },
+    chatInput: {
+        flex: 1,
+        paddingVertical: 12,
+        color: colors.textPrimary,
+        fontSize: 16,
+        maxHeight: 100,
+    },
+    sendButton: {
+        padding: 8,
+        backgroundColor: colors.primaryButton,
+        borderRadius: 20,
+        marginRight: 4,
+    },
+    routineContainer: {
+        marginTop: 16,
+        marginHorizontal: 20,
+        padding: 24,
+        borderRadius: 24,
+        backgroundColor: colors.cardBackground, // Using same card background for consistency
+        // Original was slightly different (0.05 vs 0.08 alpha) but unifying is better
+    },
+    routineTitle: {
+        marginBottom: 16,
+        fontSize: 20,
+        fontWeight: '700',
+        color: colors.textPrimary,
+    },
+    routineItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 12,
+    },
+    routineText: {
+        fontSize: 16,
+        color: colors.textPrimary,
+    },
+    routineTextDone: {
+        color: colors.textTertiary,
+        textDecorationLine: 'line-through',
+    },
+});

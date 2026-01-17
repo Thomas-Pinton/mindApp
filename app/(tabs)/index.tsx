@@ -1,36 +1,100 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, LayoutAnimation, Platform, ScrollView, TextInput, TouchableOpacity, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useSnackbar } from '@/context/SnackbarContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { createStyles } from './index.styles';
 
-import { deleteGratitude, getDailyPrompt, getTodayGratitudes, getTodayReflection, saveGratitude, saveReflection, updateGratitude } from '@/services/database';
+import { deleteGratitude, getDailyPrompt, getDailyQuote, getTodayGratitudes, getTodayReflection, isQuoteSaved, removeSavedQuote, saveGratitude, saveQuote, saveReflection, updateGratitude } from '@/services/database';
 
-const QUOTES = [
-  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
-  { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
-  { text: "Your time is limited, so don't waste it living someone else's life.", author: "Steve Jobs" },
-  { text: "The best way to predict the future is to invent it.", author: "Alan Kay" },
-  { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
-  { text: "Happiness is not something ready made. It comes from your own actions.", author: "Dalai Lama" },
-  { text: "Everything you can imagine is real.", author: "Pablo Picasso" }
-];
+function useThemeStyles() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
+  const styles = useMemo(() => createStyles(colorScheme, colors), [colorScheme, colors]);
+  return { styles, colors, colorScheme };
+}
 
 function QuoteOfTheDay() {
-  const [quote, setQuote] = useState(QUOTES[0]);
+  const [quote, setQuote] = useState({ text: "", author: "" });
+  const [isSaved, setIsSaved] = useState(false);
+  const { styles, colors } = useThemeStyles();
 
   useEffect(() => {
-    setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+    async function loadQuote() {
+      const dailyQuote = await getDailyQuote();
+      setQuote(dailyQuote);
+      if (dailyQuote.text) {
+        const saved = await isQuoteSaved(dailyQuote.text, dailyQuote.author);
+        setIsSaved(saved);
+      }
+    }
+    loadQuote();
   }, []);
+
+  const { showSnackbar } = useSnackbar();
+
+  const handleSaveQuote = async () => {
+    if (isSaved) {
+      await removeSavedQuote(quote.text, quote.author);
+      setIsSaved(false);
+    } else {
+      await saveQuote(quote.text, quote.author);
+      setIsSaved(true);
+    }
+  };
 
   return (
     <ThemedView style={styles.quoteContainer}>
       <ThemedText type="subtitle" style={styles.quoteTitle}>Quote of the Day</ThemedText>
       <ThemedText style={styles.quoteText}>"{quote.text}"</ThemedText>
       <ThemedText style={styles.quoteAuthor}>- {quote.author}</ThemedText>
+      <TouchableOpacity style={styles.saveQuoteButton} onPress={handleSaveQuote}>
+        <IconSymbol
+          name={isSaved ? "bookmark.fill" : "bookmark"}
+          size={24}
+          color={isSaved ? colors.savedIcon : colors.iconSecondary}
+        />
+      </TouchableOpacity>
+    </ThemedView>
+  );
+}
+
+function MorningRoutine() {
+  const [routineItems, setRoutineItems] = useState([
+    { id: 1, label: "Make bed", checked: false },
+    { id: 2, label: "Drink water", checked: false },
+    { id: 3, label: "Stretch", checked: false },
+    { id: 4, label: "Read 10 mins", checked: false },
+  ]);
+  const { styles, colors } = useThemeStyles();
+
+  const toggleItem = (id: number) => {
+    setRoutineItems(items =>
+      items.map(item =>
+        item.id === id ? { ...item, checked: !item.checked } : item
+      )
+    );
+  };
+
+  return (
+    <ThemedView style={styles.routineContainer}>
+      <ThemedText type="subtitle" style={styles.routineTitle}>Morning Routine</ThemedText>
+      {routineItems.map(item => (
+        <TouchableOpacity key={item.id} style={styles.routineItem} onPress={() => toggleItem(item.id)}>
+          <IconSymbol
+            name={item.checked ? "checkmark.circle.fill" : "circle"}
+            size={24}
+            color={item.checked ? colors.primaryButton : colors.iconTertiary}
+          />
+          <ThemedText style={[styles.routineText, item.checked && styles.routineTextDone]}>{item.label}</ThemedText>
+        </TouchableOpacity>
+      ))}
     </ThemedView>
   );
 }
@@ -43,11 +107,22 @@ const REFLECTIONS = [
   "What was the most challenging part of your day, and how did you handle it?"
 ];
 
-function GratitudePrompt() {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+interface GratitudePromptProps {
+  onFocus?: () => void;
+  onAdd?: () => void;
+}
+
+function GratitudePrompt({ onFocus, onAdd }: GratitudePromptProps) {
   const [gratitudes, setGratitudes] = useState<{ id: number, content: string }[]>([]);
   const [newGratitude, setNewGratitude] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
+  const { showSnackbar, hideSnackbar } = useSnackbar();
+  const { styles, colors } = useThemeStyles();
 
   const loadGratitudes = useCallback(async () => {
     const data = await getTodayGratitudes();
@@ -68,7 +143,12 @@ function GratitudePrompt() {
 
     await saveGratitude(newGratitude);
     setNewGratitude('');
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     await loadGratitudes();
+    // Scroll to bottom after adding
+    if (onAdd) {
+      setTimeout(onAdd, 100);
+    }
   };
 
   const handleUpdate = async (id: number) => {
@@ -82,19 +162,50 @@ function GratitudePrompt() {
     await loadGratitudes();
   };
 
-  const handleDelete = (id: number) => {
-    Alert.alert('Delete Gratitude', 'Are you sure you want to delete this gratitude?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteGratitude(id);
-          await loadGratitudes();
-        },
-      },
-    ]);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const confirmDelete = async (id: number) => {
+    // Delete from DB
+    await deleteGratitude(id);
+
+    // Update local state without re-fetching
+    // We don't need to animate here because it's already hidden via pendingDeleteId
+    // But we need to remove it from the list so when we clear pendingDeleteId it doesn't reappear
+    setGratitudes(current => current.filter(item => item.id !== id));
+    setPendingDeleteId(null);
   };
+
+  const handleDelete = (id: number) => {
+    if (pendingDeleteId && pendingDeleteId !== id) {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      confirmDelete(pendingDeleteId);
+    }
+
+    const item = gratitudes.find(g => g.id === id);
+    const message = item ? `Gratitude "${item.content}" deleted` : 'Gratitude deleted';
+
+    // Animate the disappearance
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPendingDeleteId(id);
+
+    showSnackbar(message, undoDelete);
+
+    deleteTimerRef.current = setTimeout(() => {
+      confirmDelete(id);
+    }, 3000);
+  };
+
+  const undoDelete = () => {
+    if (deleteTimerRef.current) {
+      clearTimeout(deleteTimerRef.current);
+      deleteTimerRef.current = null;
+    }
+    // Animate the reappearance
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setPendingDeleteId(null);
+  };
+
 
   const startEditing = (item: { id: number, content: string }) => {
     setEditingId(item.id);
@@ -107,7 +218,7 @@ function GratitudePrompt() {
       <ThemedText style={styles.quoteText}>What are you grateful for today?</ThemedText>
 
       <ThemedView style={styles.gratitudeList}>
-        {gratitudes.map((item) => (
+        {gratitudes.filter(item => item.id !== pendingDeleteId).map((item) => (
           <ThemedView key={item.id} style={styles.gratitudeItemRow}>
             {editingId === item.id ? (
               <ThemedView style={styles.editContainer}>
@@ -116,12 +227,16 @@ function GratitudePrompt() {
                   value={editContent}
                   onChangeText={setEditContent}
                   autoFocus
+                  placeholderTextColor={colors.textTertiary}
                 />
                 <TouchableOpacity onPress={() => handleUpdate(item.id)}>
-                  <IconSymbol name="checkmark.circle.fill" size={24} color="#4a90e2" />
+                  <IconSymbol name="checkmark.circle.fill" size={24} color={colors.successIcon} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <IconSymbol name="trash.fill" size={24} color={colors.deleteIcon} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setEditingId(null)}>
-                  <IconSymbol name="xmark.circle.fill" size={24} color="#999" />
+                  <IconSymbol name="xmark.circle.fill" size={24} color={colors.cancelIcon} />
                 </TouchableOpacity>
               </ThemedView>
             ) : (
@@ -129,10 +244,10 @@ function GratitudePrompt() {
                 <TouchableOpacity
                   style={styles.gratitudeContent}
                   onPress={() => startEditing(item)}>
-                  <ThemedText>• {item.content}</ThemedText>
+                  <ThemedText style={styles.gratitudeText}>• {item.content}</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                  <IconSymbol name="trash.fill" size={20} color="#ff6b6b" />
+                  <IconSymbol name="trash.fill" size={20} color={colors.deleteIcon} />
                 </TouchableOpacity>
               </>
             )}
@@ -140,24 +255,26 @@ function GratitudePrompt() {
         ))}
       </ThemedView>
 
+
       <ThemedView style={styles.inputContainer}>
         <TextInput
           style={styles.chatInput}
           placeholder="I am grateful for..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textTertiary}
           value={newGratitude}
           onChangeText={setNewGratitude}
           multiline
-          blurOnSubmit
+          blurOnSubmit={false}
           submitBehavior="submit"
           onSubmitEditing={handleSave}
           returnKeyType="send"
+          onFocus={onFocus}
         />
         <TouchableOpacity
           style={styles.sendButton}
           onPress={handleSave}
         >
-          <IconSymbol name="arrow.up.circle.fill" size={32} color="#4a90e2" />
+          <IconSymbol name="arrow.up" size={20} color="#fff" />
         </TouchableOpacity>
       </ThemedView>
     </ThemedView>
@@ -167,6 +284,8 @@ function GratitudePrompt() {
 function ReflectionPrompt() {
   const [reflection, setReflection] = useState(REFLECTIONS[0]);
   const [answer, setAnswer] = useState('');
+  const { showSnackbar } = useSnackbar();
+  const { styles, colors } = useThemeStyles();
 
   useFocusEffect(
     useCallback(() => {
@@ -198,7 +317,7 @@ function ReflectionPrompt() {
       <TextInput
         style={styles.input}
         placeholder="Type your thoughts here..."
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.textTertiary}
         value={answer}
         onChangeText={setAnswer}
         multiline
@@ -212,7 +331,7 @@ function ReflectionPrompt() {
           }
           saveReflection(reflection, answer);
           // Don't clear answer on save anymore, as it acts as an edit
-          Alert.alert('Saved', 'Your reflection has been saved.');
+          showSnackbar('Reflection saved');
         }}
       >
         <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
@@ -224,6 +343,8 @@ function ReflectionPrompt() {
 
 export default function HomeScreen() {
   const [hours, setHours] = useState(new Date().getHours());
+  const scrollRef = useRef<ScrollView>(null);
+  const { styles } = useThemeStyles();
 
   useEffect(() => {
     // Update hours every minute to ensure correct greeting/content even if app stays open
@@ -241,123 +362,41 @@ export default function HomeScreen() {
 
   const isEvening = hours >= 18;
 
+  const handleInputFocus = () => {
+    // Wait a bit for keyboard to start showing
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView>
-        <ThemedText type="title" style={styles.header}>{getGreeting()}, username</ThemedText>
-        {isEvening ? (
-          <>
-            <ReflectionPrompt />
-            <GratitudePrompt />
-          </>
-        ) : (
-          <QuoteOfTheDay />
-        )}
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <ScrollView
+            ref={scrollRef}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <ThemedText type="title" style={styles.header}>{getGreeting()}, Thomas</ThemedText>
+            {!isEvening ? (
+              <>
+                <ReflectionPrompt />
+                <GratitudePrompt onFocus={handleInputFocus} onAdd={handleInputFocus} />
+              </>
+            ) : (
+              <>
+                <QuoteOfTheDay />
+                <MorningRoutine />
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    padding: 24,
-    paddingBottom: 12,
-  },
-  quoteContainer: {
-    marginTop: 12,
-    marginHorizontal: 24,
-    padding: 20,
-    borderRadius: 16,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-  },
-  quoteTitle: {
-    marginBottom: 8,
-    fontSize: 18,
-  },
-  quoteText: {
-    fontSize: 16,
-    fontStyle: 'italic',
-    lineHeight: 24,
-  },
-  quoteAuthor: {
-    textAlign: 'right',
-    marginTop: 8,
-    opacity: 0.6,
-  },
-  input: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    color: '#fff', // Assuming dark theme dominance or handled via themed view effectively
-    fontSize: 16,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4a90e2',
-    padding: 12,
-    marginTop: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  gratitudeList: {
-    gap: 8,
-    marginVertical: 12,
-  },
-  gratitudeItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  gratitudeContent: {
-    flex: 1,
-    marginRight: 8,
-  },
-  editContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  editInput: {
-    flex: 1,
-    color: '#fff',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 4,
-    padding: 4,
-    fontSize: 14, // Match default text size roughly
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  chatInput: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    color: '#fff',
-    fontSize: 16,
-    maxHeight: 100,
-  },
-  sendButton: {
-    padding: 4,
-  }
-});

@@ -20,6 +20,12 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'checkmark.circle.fill': 'check-circle',
   'book.fill': 'book',
+  'trash.fill': 'delete',
+  'xmark.circle.fill': 'cancel',
+  'arrow.up': 'arrow-upward',
+  'bookmark': 'bookmark-border',
+  'bookmark.fill': 'bookmark',
+  'circle': 'radio-button-unchecked',
 } as IconMapping;
 
 /**
