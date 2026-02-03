@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, LayoutAnimation, Platform, ScrollView, TextInput, TouchableOpacity, UIManager } from 'react-native';
+import { Alert, KeyboardAvoidingView, LayoutAnimation, Platform, ScrollView, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,9 +9,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { createStyles } from './index.styles';
 
-import { deleteGratitude, getDailyPrompt, getDailyQuote, getTodayGratitudes, getTodayReflection, isQuoteSaved, removeSavedQuote, saveGratitude, saveQuote, saveReflection, updateGratitude } from '@/services/database';
+import { deleteGratitude, getDailyPrompt, getDailyQuote, getMorningRoutineItems, getTodayGratitudes, getTodayReflection, isQuoteSaved, removeSavedQuote, saveGratitude, saveQuote, saveReflection, syncMorningRoutineItems, updateGratitude, updateMorningRoutineItemStatus } from '@/services/database';
 
 function useThemeStyles() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -65,36 +66,191 @@ function QuoteOfTheDay() {
   );
 }
 
+interface RoutineItem {
+  id: number;
+  label: string;
+  checked: boolean;
+}
+
 function MorningRoutine() {
-  const [routineItems, setRoutineItems] = useState([
-    { id: 1, label: "Make bed", checked: false },
-    { id: 2, label: "Drink water", checked: false },
-    { id: 3, label: "Stretch", checked: false },
-    { id: 4, label: "Read 10 mins", checked: false },
-  ]);
+  const [routineItems, setRoutineItems] = useState<RoutineItem[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editItems, setEditItems] = useState<RoutineItem[]>([]);
   const { styles, colors } = useThemeStyles();
 
-  const toggleItem = (id: number) => {
-    setRoutineItems(items =>
-      items.map(item =>
-        item.id === id ? { ...item, checked: !item.checked } : item
-      )
-    );
+  const loadRoutine = useCallback(async () => {
+    const items = await getMorningRoutineItems();
+    if (items.length === 0) {
+      // Default items if empty
+      const defaultItems = [
+        { id: 1, label: "Make bed", checked: false },
+        { id: 2, label: "Drink water", checked: false },
+        { id: 3, label: "Stretch", checked: false },
+        { id: 4, label: "Read 10 mins", checked: false },
+      ];
+      // Save defaults immediately so they persist
+      await syncMorningRoutineItems(defaultItems);
+      setRoutineItems(defaultItems);
+    } else {
+      setRoutineItems(items);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isEditing) {
+        loadRoutine();
+      }
+    }, [loadRoutine, isEditing])
+  );
+
+  const toggleItem = async (id: number) => {
+    if (isEditing) return;
+
+    const item = routineItems.find(i => i.id === id);
+    if (item) {
+      const newChecked = !item.checked;
+
+      // Optimistic update
+      setRoutineItems(items =>
+        items.map(i => i.id === id ? { ...i, checked: newChecked } : i)
+      );
+
+      // Persist
+      await updateMorningRoutineItemStatus(id, newChecked);
+    }
   };
+
+  const startEditing = () => {
+    setEditItems(JSON.parse(JSON.stringify(routineItems)));
+    setIsEditing(true);
+  };
+
+  const saveEditing = async () => {
+    // Filter out empty items
+    const validItems = editItems.filter(i => i.label.trim().length > 0);
+
+    // Optimistic update
+    setRoutineItems(validItems);
+    setIsEditing(false);
+
+    // Persist
+    await syncMorningRoutineItems(validItems);
+    await loadRoutine(); // Reload to get stable IDs from DB
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditItems([]);
+  };
+
+  const updateEditItem = (id: number, text: string) => {
+    setEditItems(items => items.map(i => i.id === id ? { ...i, label: text } : i));
+  };
+
+  const addEditItem = () => {
+    // Generate a temporary ID that won't collide with existing ones
+    // We'll trust the DB sync to assign real IDs later
+    const tempId = Date.now();
+    setEditItems(items => [...items, { id: tempId, label: "", checked: false }]);
+  };
+
+  const removeEditItem = (id: number) => {
+    setEditItems(items => items.filter(i => i.id !== id));
+  };
+
+  const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<RoutineItem>) => {
+    return (
+      <ScaleDecorator>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 10,
+          opacity: isActive ? 0.8 : 1
+        }}>
+          <TouchableOpacity onPressIn={drag} disabled={isActive} style={{ paddingRight: 10 }}>
+            <IconSymbol name="line.3.horizontal" size={24} color={colors.iconTertiary} />
+          </TouchableOpacity>
+          <TextInput
+            style={{
+              flex: 1,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.cardBorder,
+              paddingVertical: 8,
+              color: colors.text,
+              fontSize: 16,
+              marginRight: 10
+            }}
+            value={item.label}
+            onChangeText={(text) => updateEditItem(item.id, text)}
+            placeholder="Routine item..."
+            placeholderTextColor={colors.textTertiary}
+          />
+          <TouchableOpacity onPress={() => removeEditItem(item.id)}>
+            <IconSymbol name="trash.fill" size={20} color={colors.deleteIcon} />
+          </TouchableOpacity>
+        </View>
+      </ScaleDecorator>
+    );
+  }, [colors, updateEditItem, removeEditItem]);
 
   return (
     <ThemedView style={styles.routineContainer}>
-      <ThemedText type="subtitle" style={styles.routineTitle}>Morning Routine</ThemedText>
-      {routineItems.map(item => (
-        <TouchableOpacity key={item.id} style={styles.routineItem} onPress={() => toggleItem(item.id)}>
-          <IconSymbol
-            name={item.checked ? "checkmark.circle.fill" : "circle"}
-            size={24}
-            color={item.checked ? colors.primaryButton : colors.iconTertiary}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <ThemedText type="subtitle" style={{ marginBottom: 0 }}>Morning Routine</ThemedText>
+        {isEditing ? (
+          <TouchableOpacity onPress={saveEditing}>
+            <IconSymbol name="checkmark" size={24} color={colors.primaryButton} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={startEditing}>
+            <IconSymbol name="pencil" size={20} color={colors.iconSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {isEditing ? (
+        <View style={{ height: 300 }}>
+          <DraggableFlatList
+            data={editItems}
+            onDragEnd={({ data }) => setEditItems(data)}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderItem}
+            ListFooterComponent={
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 12,
+                  marginTop: 4,
+                  borderWidth: 1,
+                  borderColor: colors.cardBorder,
+                  borderRadius: 8,
+                  borderStyle: 'dashed'
+                }}
+                onPress={addEditItem}
+              >
+                <IconSymbol name="plus" size={16} color={colors.iconSecondary} />
+                <ThemedText style={{ marginLeft: 8, color: colors.textSecondary }}>Add Item</ThemedText>
+              </TouchableOpacity>
+            }
           />
-          <ThemedText style={[styles.routineText, item.checked && styles.routineTextDone]}>{item.label}</ThemedText>
-        </TouchableOpacity>
-      ))}
+        </View>
+      ) : (
+        <View>
+          {routineItems.map(item => (
+            <TouchableOpacity key={item.id} style={styles.routineItem} onPress={() => toggleItem(item.id)}>
+              <IconSymbol
+                name={item.checked ? "checkmark.circle.fill" : "circle"}
+                size={24}
+                color={item.checked ? colors.primaryButton : colors.iconTertiary}
+              />
+              <ThemedText style={[styles.routineText, item.checked && styles.routineTextDone]}>{item.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -383,7 +539,7 @@ export default function HomeScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <ThemedText type="title" style={styles.header}>{getGreeting()}, Thomas</ThemedText>
-            {!isEvening ? (
+            {isEvening ? (
               <>
                 <ReflectionPrompt />
                 <GratitudePrompt onFocus={handleInputFocus} onAdd={handleInputFocus} />

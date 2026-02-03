@@ -45,6 +45,11 @@ export const initDatabase = async () => {
       author TEXT NOT NULL,
       date TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS morning_routines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      checked INTEGER DEFAULT 0
+    );
   `);
 };
 
@@ -233,3 +238,43 @@ export const getGratitudes = async (): Promise<{ id: number, content: string, da
     const allRows = await db.getAllAsync('SELECT * FROM gratitudes ORDER BY date DESC');
     return allRows as { id: number, content: string, date: string }[];
 }
+
+export const getSavedQuotes = async (): Promise<{ id: number, text: string, author: string, date: string }[]> => {
+    const db = await getDb();
+    const allRows = await db.getAllAsync('SELECT * FROM saved_quotes ORDER BY date DESC');
+    return allRows as { id: number, text: string, author: string, date: string }[];
+}
+
+export const getMorningRoutineItems = async (): Promise<{ id: number, label: string, checked: boolean }[]> => {
+    const db = await getDb();
+    const allRows = await db.getAllAsync<{ id: number, label: string, checked: number }>('SELECT * FROM morning_routines ORDER BY id ASC');
+    return allRows.map(row => ({
+        ...row,
+        checked: !!row.checked
+    }));
+};
+
+export const syncMorningRoutineItems = async (items: { label: string, checked: boolean }[]) => {
+    const db = await getDb();
+    // Use a transaction to ensure atomicity
+    await db.withTransactionAsync(async () => {
+        // Clear existing items
+        await db.runAsync('DELETE FROM morning_routines');
+
+        // Insert new items
+        for (const item of items) {
+            await db.runAsync(
+                'INSERT INTO morning_routines (label, checked) VALUES (?, ?)',
+                [item.label, item.checked ? 1 : 0]
+            );
+        }
+    });
+};
+
+export const updateMorningRoutineItemStatus = async (id: number, checked: boolean) => {
+    const db = await getDb();
+    await db.runAsync(
+        'UPDATE morning_routines SET checked = ? WHERE id = ?',
+        [checked ? 1 : 0, id]
+    );
+};

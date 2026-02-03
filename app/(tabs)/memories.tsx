@@ -6,11 +6,12 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getGratitudes, getReflections, Reflection } from '@/services/database';
+import { getGratitudes, getReflections, getSavedQuotes, Reflection } from '@/services/database';
 
 type MemoryItem =
     | { type: 'reflection', data: Reflection }
-    | { type: 'gratitude', data: { id: number, content: string, date: string } };
+    | { type: 'gratitude', data: { id: number, content: string, date: string } }
+    | { type: 'quote', data: { id: number, text: string, author: string, date: string } };
 
 export default function MemoriesScreen() {
     const [memories, setMemories] = useState<MemoryItem[]>([]);
@@ -18,14 +19,16 @@ export default function MemoriesScreen() {
     useFocusEffect(
         useCallback(() => {
             async function loadMemories() {
-                const [reflections, gratitudes] = await Promise.all([
+                const [reflections, gratitudes, quotes] = await Promise.all([
                     getReflections(),
-                    getGratitudes()
+                    getGratitudes(),
+                    getSavedQuotes()
                 ]);
 
                 const combined: MemoryItem[] = [
                     ...reflections.map(r => ({ type: 'reflection' as const, data: r })),
-                    ...gratitudes.map(g => ({ type: 'gratitude' as const, data: g }))
+                    ...gratitudes.map(g => ({ type: 'gratitude' as const, data: g })),
+                    ...quotes.map(q => ({ type: 'quote' as const, data: q }))
                 ].sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
 
                 setMemories(combined);
@@ -44,12 +47,21 @@ export default function MemoriesScreen() {
                     <ThemedText style={styles.answer}>{item.data.answer}</ThemedText>
                 </ThemedView>
             );
-        } else {
+        } else if (item.type === 'gratitude') {
             return (
                 <ThemedView style={styles.card}>
                     <ThemedText style={styles.date}>{new Date(item.data.date).toLocaleDateString()}</ThemedText>
                     <ThemedText type="subtitle" style={styles.label}>Daily Gratitude</ThemedText>
                     <ThemedText style={styles.answer}>{item.data.content}</ThemedText>
+                </ThemedView>
+            );
+        } else {
+            return (
+                <ThemedView style={styles.card}>
+                    <ThemedText style={styles.date}>{new Date(item.data.date).toLocaleDateString()}</ThemedText>
+                    <ThemedText type="subtitle" style={styles.label}>Quote of the Day</ThemedText>
+                    <ThemedText style={styles.answer}>"{item.data.text}"</ThemedText>
+                    <ThemedText style={[styles.answer, { marginTop: 4, fontStyle: 'italic', opacity: 0.7 }]}>- {item.data.author}</ThemedText>
                 </ThemedView>
             );
         }

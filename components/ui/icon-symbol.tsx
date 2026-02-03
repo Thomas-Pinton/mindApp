@@ -26,6 +26,9 @@ const MAPPING = {
   'bookmark': 'bookmark-border',
   'bookmark.fill': 'bookmark',
   'circle': 'radio-button-unchecked',
+  'pencil': 'edit',
+  'checkmark': 'check',
+  'line.3.horizontal': 'menu',
 } as IconMapping;
 
 /**
