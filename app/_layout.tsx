@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Colors } from '@/constants/theme';
+import { SettingsProvider } from '@/context/SettingsContext';
 import { SnackbarProvider } from '@/context/SnackbarContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -44,12 +45,14 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <SnackbarProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-        </SnackbarProvider>
+        <SettingsProvider>
+          <SnackbarProvider>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+          </SnackbarProvider>
+        </SettingsProvider>
         <StatusBar style="auto" backgroundColor={Colors[colorScheme ?? 'light'].background} />
       </ThemeProvider>
     </GestureHandlerRootView>

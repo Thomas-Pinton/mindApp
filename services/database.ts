@@ -50,7 +50,38 @@ export const initDatabase = async () => {
       label TEXT NOT NULL,
       checked INTEGER DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value INTEGER DEFAULT 1
+    );
   `);
+};
+
+export const getAllSettings = async (): Promise<Record<string, boolean>> => {
+    const db = await getDb();
+    const allRows = await db.getAllAsync<{ key: string, value: number }>('SELECT * FROM settings');
+
+    // Default settings
+    const settings: Record<string, boolean> = {
+        setting_dailyQuote: true,
+        setting_morningRoutine: true,
+        setting_eveningReflection: true,
+        setting_dailyGratitude: true,
+    };
+
+    allRows.forEach(row => {
+        settings[row.key] = !!row.value;
+    });
+
+    return settings;
+};
+
+export const saveSetting = async (key: string, value: boolean) => {
+    const db = await getDb();
+    await db.runAsync(
+        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+        [key, value ? 1 : 0]
+    );
 };
 
 export const getTodayReflection = async (): Promise<Reflection | null> => {

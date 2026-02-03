@@ -115,6 +115,7 @@ export const createStyles = (theme: 'light' | 'dark', colors: typeof Colors.ligh
         padding: 4,
         paddingLeft: 12,
         borderRadius: 24,
+        backgroundColor: colors.inputBackground,
     },
     chatInput: {
         flex: 1,

@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useSettings } from '@/context/SettingsContext';
 import { useSnackbar } from '@/context/SnackbarContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -525,6 +526,8 @@ export default function HomeScreen() {
     }, 100);
   };
 
+  const { showDailyQuote, showMorningRoutine, showEveningReflection, showDailyGratitude } = useSettings();
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -541,14 +544,21 @@ export default function HomeScreen() {
             <ThemedText type="title" style={styles.header}>{getGreeting()}, Thomas</ThemedText>
             {isEvening ? (
               <>
-                <ReflectionPrompt />
-                <GratitudePrompt onFocus={handleInputFocus} onAdd={handleInputFocus} />
+                {showEveningReflection && <ReflectionPrompt />}
+                {showDailyGratitude && <GratitudePrompt onFocus={handleInputFocus} onAdd={handleInputFocus} />}
               </>
             ) : (
               <>
-                <QuoteOfTheDay />
-                <MorningRoutine />
+                {showDailyQuote && <QuoteOfTheDay />}
+                {showMorningRoutine && <MorningRoutine />}
               </>
+            )}
+            {/* Show a message if all features for the time of day are disabled */}
+            {isEvening && !showEveningReflection && !showDailyGratitude && (
+              <ThemedText style={{ textAlign: 'center', marginTop: 40, opacity: 0.6 }}>No evening activities enabled.</ThemedText>
+            )}
+            {!isEvening && !showDailyQuote && !showMorningRoutine && (
+              <ThemedText style={{ textAlign: 'center', marginTop: 40, opacity: 0.6 }}>No morning activities enabled.</ThemedText>
             )}
           </ScrollView>
         </KeyboardAvoidingView>

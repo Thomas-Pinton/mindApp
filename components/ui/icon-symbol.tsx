@@ -29,6 +29,7 @@ const MAPPING = {
   'pencil': 'edit',
   'checkmark': 'check',
   'line.3.horizontal': 'menu',
+  'gearshape.fill': 'settings',
 } as IconMapping;
 
 /**
