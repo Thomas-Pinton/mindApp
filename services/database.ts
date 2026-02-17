@@ -57,30 +57,43 @@ export const initDatabase = async () => {
   `);
 };
 
-export const getAllSettings = async (): Promise<Record<string, boolean>> => {
+export const getAllSettings = async (): Promise<Record<string, any>> => {
     const db = await getDb();
     const allRows = await db.getAllAsync<{ key: string, value: number }>('SELECT * FROM settings');
 
     // Default settings
-    const settings: Record<string, boolean> = {
+    const settings: Record<string, any> = {
         setting_dailyQuote: true,
         setting_morningRoutine: true,
         setting_eveningReflection: true,
         setting_dailyGratitude: true,
+        setting_primaryColorIndex: 0,
     };
 
     allRows.forEach(row => {
-        settings[row.key] = !!row.value;
+        if (row.key === 'setting_primaryColorIndex') {
+            // @ts-ignore - we know this is a number in the DB but typed as generic Record<string, boolean> in this function's return type in the original code, 
+            // but actually the return type of this function needs to be flexible or we cast it. 
+            // The existing return signature is Promise<Record<string, boolean>>. 
+            // I should update the return signature to be more flexible: Promise<Record<string, any>>
+            settings[row.key] = row.value;
+        } else {
+            settings[row.key] = !!row.value;
+        }
     });
 
     return settings;
 };
 
-export const saveSetting = async (key: string, value: boolean) => {
+export const saveSetting = async (key: string, value: boolean | number) => {
     const db = await getDb();
+    let dbValue = value;
+    if (typeof value === 'boolean') {
+        dbValue = value ? 1 : 0;
+    }
     await db.runAsync(
         'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-        [key, value ? 1 : 0]
+        [key, dbValue]
     );
 };
 
@@ -263,6 +276,14 @@ export const getReflections = async (): Promise<Reflection[]> => {
     const allRows = await db.getAllAsync('SELECT * FROM reflections ORDER BY date DESC');
     return allRows as Reflection[];
 }
+
+export const deleteReflection = async (id: number) => {
+    const db = await getDb();
+    await db.runAsync(
+        'DELETE FROM reflections WHERE id = ?',
+        [id]
+    );
+};
 
 export const getGratitudes = async (): Promise<{ id: number, content: string, date: string }[]> => {
     const db = await getDb();

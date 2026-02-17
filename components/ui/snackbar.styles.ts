@@ -1,10 +1,11 @@
 import { Colors } from '@/constants/theme';
 import { StyleSheet } from 'react-native';
+import { EdgeInsets } from 'react-native-safe-area-context';
 
-export const createStyles = (theme: 'light' | 'dark', colors: typeof Colors.light) => StyleSheet.create({
+export const createStyles = (theme: 'light' | 'dark', colors: typeof Colors.light, insets: EdgeInsets) => StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 24,
+        top: insets.top + 10,
         left: 20,
         right: 20,
         zIndex: 1000,

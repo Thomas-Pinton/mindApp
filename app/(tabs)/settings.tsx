@@ -1,10 +1,10 @@
-import { StyleSheet, Switch } from 'react-native';
+import { StyleSheet, Switch, TouchableOpacity } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { ColorPalette, Colors } from '@/constants/theme';
 import { useSettings } from '@/context/SettingsContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -18,10 +18,13 @@ export default function SettingsScreen() {
         setShowEveningReflection,
         showDailyGratitude,
         setShowDailyGratitude,
+        primaryColor,
+        primaryColorIndex,
+        setPrimaryColorIndex,
     } = useSettings();
     const colorScheme = useColorScheme() ?? 'light';
     const activeThumbColor = '#fff';
-    const activeTrackColor = Colors[colorScheme].primaryButton;
+    const activeTrackColor = primaryColor;
     const trackColor = { false: '#767577', true: activeTrackColor };
 
     return (
@@ -39,6 +42,24 @@ export default function SettingsScreen() {
                 <ThemedText type="title">Settings</ThemedText>
             </ThemedView>
             <ThemedView style={styles.contentContainer}>
+                <ThemedView style={styles.section}>
+                    <ThemedText type="subtitle" style={styles.sectionTitle}>Appearance</ThemedText>
+                    <ThemedView style={styles.colorPaletteContainer}>
+                        {ColorPalette.map((color, index) => (
+                            <TouchableOpacity
+                                key={color}
+                                onPress={() => setPrimaryColorIndex(index)}
+                                style={[
+                                    styles.colorOption,
+                                    { backgroundColor: color },
+                                    primaryColorIndex === index && styles.selectedColorOption,
+                                    primaryColorIndex === index && { borderColor: Colors[colorScheme].text }
+                                ]}
+                            />
+                        ))}
+                    </ThemedView>
+                </ThemedView>
+
                 <ThemedView style={styles.section}>
                     <ThemedText type="subtitle" style={styles.sectionTitle}>Morning</ThemedText>
 
@@ -125,5 +146,21 @@ const styles = StyleSheet.create({
     },
     label: {
         fontSize: 16,
+    },
+    colorPaletteContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        paddingVertical: 8,
+    },
+    colorOption: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    selectedColorOption: {
+        borderWidth: 3,
     },
 });

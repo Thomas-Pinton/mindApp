@@ -13,6 +13,7 @@ import Animated, {
     withSpring,
     withTiming,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createStyles } from './snackbar.styles';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -25,10 +26,23 @@ interface SnackbarProps {
     visible: boolean;
 }
 
+import { useSettings } from '@/context/SettingsContext';
+
+// ... existing imports ...
+
 export function Snackbar({ message, onUndo, onDismiss, visible }: SnackbarProps) {
     const colorScheme = useColorScheme() ?? 'light';
-    const colors = Colors[colorScheme];
-    const styles = useMemo(() => createStyles(colorScheme, colors), [colorScheme, colors]);
+    const { primaryColor } = useSettings();
+    const insets = useSafeAreaInsets();
+
+    const colors = useMemo(() => ({
+        ...Colors[colorScheme],
+        primaryButton: primaryColor,
+        // override other relevant colors if needed, e.g. successIcon if it should follow primary theme, 
+        // but for now sticking to primaryButton which seems to be the main actionable color.
+    }), [colorScheme, primaryColor]);
+
+    const styles = useMemo(() => createStyles(colorScheme, colors, insets), [colorScheme, colors, insets]);
 
     const translateX = useSharedValue(0);
     const opacity = useSharedValue(0);

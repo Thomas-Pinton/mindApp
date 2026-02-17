@@ -1,3 +1,4 @@
+import { ColorPalette } from '@/constants/theme';
 import { getAllSettings, saveSetting } from '@/services/database';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -10,6 +11,9 @@ type SettingsContextType = {
     setShowEveningReflection: (value: boolean) => void;
     showDailyGratitude: boolean;
     setShowDailyGratitude: (value: boolean) => void;
+    primaryColorIndex: number;
+    setPrimaryColorIndex: (index: number) => void;
+    primaryColor: string;
     isLoading: boolean;
 };
 
@@ -20,6 +24,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const [showMorningRoutine, setShowMorningRoutineState] = useState(true);
     const [showEveningReflection, setShowEveningReflectionState] = useState(true);
     const [showDailyGratitude, setShowDailyGratitudeState] = useState(true);
+    const [primaryColorIndex, setPrimaryColorIndexState] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -33,6 +38,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             setShowMorningRoutineState(settings.setting_morningRoutine);
             setShowEveningReflectionState(settings.setting_eveningReflection);
             setShowDailyGratitudeState(settings.setting_dailyGratitude);
+            setPrimaryColorIndexState(settings.setting_primaryColorIndex ?? 0);
         } catch (e) {
             console.error('Failed to load settings', e);
         } finally {
@@ -40,10 +46,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const updateSetting = async (key: string, value: boolean, setter: (v: boolean) => void) => {
+    const updateSetting = async (key: string, value: boolean | number, setter: (v: any) => void) => {
         setter(value);
         try {
-            await saveSetting(key, value);
+            // @ts-ignore - saveSetting expects boolean, but we need to support numbers too now.
+            // We should update saveSetting signature too, but for now we can rely on how it's implemented or update it.
+            // Actually, looking at saveSetting, it does `value ? 1 : 0`. That won't work for index > 1.
+            // I need to update saveSetting in database.ts as well to handle numbers correctly.
+            await saveSetting(key, value as any);
         } catch (e) {
             console.error(`Failed to save setting ${key}`, e);
         }
@@ -65,6 +75,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         updateSetting('setting_dailyGratitude', value, setShowDailyGratitudeState);
     };
 
+    const setPrimaryColorIndex = (index: number) => {
+        updateSetting('setting_primaryColorIndex', index, setPrimaryColorIndexState);
+    };
+
+    const primaryColor = ColorPalette[primaryColorIndex] || ColorPalette[0];
+
     return (
         <SettingsContext.Provider
             value={{
@@ -76,6 +92,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
                 setShowEveningReflection,
                 showDailyGratitude,
                 setShowDailyGratitude,
+                primaryColorIndex,
+                setPrimaryColorIndex,
+                primaryColor,
                 isLoading,
             }}
         >

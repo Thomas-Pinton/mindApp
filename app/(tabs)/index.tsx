@@ -17,7 +17,14 @@ import { deleteGratitude, getDailyPrompt, getDailyQuote, getMorningRoutineItems,
 
 function useThemeStyles() {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { primaryColor } = useSettings();
+  const colors = useMemo(() => ({
+    ...Colors[colorScheme],
+    primaryButton: primaryColor,
+    tint: primaryColor,
+    tabIconSelected: primaryColor,
+  }), [colorScheme, primaryColor]);
+
   const styles = useMemo(() => createStyles(colorScheme, colors), [colorScheme, colors]);
   return { styles, colors, colorScheme };
 }

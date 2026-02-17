@@ -61,6 +61,15 @@ export const Colors = {
   },
 };
 
+export const ColorPalette = [
+  '#0a7ea4', // Blue (Default)
+  '#9b59b6', // Purple
+  '#2ecc71', // Green
+  '#e67e22', // Orange
+  '#e91e63', // Pink
+  '#1abc9c', // Teal
+];
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
